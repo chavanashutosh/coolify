@@ -19,6 +19,7 @@
 #   COOLIFY_DB_USER=coolify
 #   COOLIFY_DB_NAME=coolify
 #   COOLIFY_UPDATE_EXISTING=0   set to 1 to git pull when install dir already exists
+#   COOLIFY_REMOVE_EXISTING_INSTALL=0  set to 1 to rm -rf install dir then fresh clone (overrides UPDATE_EXISTING)
 #   COOLIFY_RESET_DB=0          set to 1 to DROP DATABASE (destructive) before create
 # =============================================================================
 set -euo pipefail
@@ -37,6 +38,7 @@ COOLIFY_DB_USER="${COOLIFY_DB_USER:-coolify}"
 COOLIFY_DB_NAME="${COOLIFY_DB_NAME:-coolify}"
 COOLIFY_DB_PASSWORD="${COOLIFY_DB_PASSWORD:-}"
 COOLIFY_UPDATE_EXISTING="${COOLIFY_UPDATE_EXISTING:-0}"
+COOLIFY_REMOVE_EXISTING_INSTALL="${COOLIFY_REMOVE_EXISTING_INSTALL:-0}"
 COOLIFY_RESET_DB="${COOLIFY_RESET_DB:-0}"
 NODE_MAJOR="${NODE_MAJOR:-24}"
 
@@ -233,6 +235,14 @@ clone_or_update_app() {
     fi
     chown www-data:www-data /var/www/.gitconfig
     chmod 644 /var/www/.gitconfig
+  fi
+
+  if [[ "${COOLIFY_REMOVE_EXISTING_INSTALL}" == "1" ]] && [[ -e "${COOLIFY_INSTALL_DIR}" ]]; then
+    log "WARNING: COOLIFY_REMOVE_EXISTING_INSTALL=1 — removing ${COOLIFY_INSTALL_DIR} (destructive)."
+    if command -v supervisorctl >/dev/null 2>&1; then
+      supervisorctl stop coolify-horizon 2>/dev/null || true
+    fi
+    rm -rf "${COOLIFY_INSTALL_DIR}"
   fi
 
   if [[ -d "${COOLIFY_INSTALL_DIR}/.git" ]]; then

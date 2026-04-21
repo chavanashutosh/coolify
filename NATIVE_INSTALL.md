@@ -264,6 +264,12 @@ curl -fsSL https://raw.githubusercontent.com/chavanashutosh/coolify/next/scripts
 sudo bash install-native-ubuntu24.sh
 ```
 
+Replace an existing checkout at `COOLIFY_INSTALL_DIR` with a fresh clone (destructive):
+
+```bash
+sudo COOLIFY_REMOVE_EXISTING_INSTALL=1 bash scripts/install-native-ubuntu24.sh
+```
+
 (Adjust the URL/branch if you use a fork.)
 
 ### Environment variables (all optional)
@@ -282,6 +288,7 @@ sudo bash install-native-ubuntu24.sh
 | `COOLIFY_DB_NAME` | `coolify` | Database name |
 | `COOLIFY_DB_PASSWORD` | (generated) | DB password; written to `.env` |
 | `COOLIFY_UPDATE_EXISTING` | `0` | Set to `1` to `git pull` when the install directory already exists |
+| `COOLIFY_REMOVE_EXISTING_INSTALL` | `0` | Set to `1` to delete `COOLIFY_INSTALL_DIR` and clone again (stops `coolify-horizon` first if Supervisor is present). If both this and `COOLIFY_UPDATE_EXISTING` are set, removal wins (fresh clone). For Nginx/cron/DB teardown use [`scripts/uninstall-native-ubuntu24.sh`](scripts/uninstall-native-ubuntu24.sh). |
 | `COOLIFY_RESET_DB` | `0` | Set to `1` to `DROP DATABASE` before create (destructive) |
 | `NODE_MAJOR` | `24` | NodeSource major version |
 
@@ -292,6 +299,8 @@ sudo COOLIFY_APP_URL=http://127.0.0.1 COOLIFY_SKIP_LETSENCRYPT=1 bash scripts/in
 ```
 
 ### Clean reinstall
+
+To **only** replace the application tree under `COOLIFY_INSTALL_DIR` (e.g. wrong or stale clone), run the installer with **`COOLIFY_REMOVE_EXISTING_INSTALL=1`** instead of a full uninstall.
 
 To tear down what [`scripts/install-native-ubuntu24.sh`](scripts/install-native-ubuntu24.sh) configured and start fresh, use [`scripts/uninstall-native-ubuntu24.sh`](scripts/uninstall-native-ubuntu24.sh) (Ubuntu **24.04**, **root**). It stops **coolify-soketi** and **coolify-horizon**, removes their unit/Supervisor/Nginx/cron files, and optionally purges data. It does **not** remove apt packages (PHP, Postgres, Nginx, Redis, Node, etc.).
 
