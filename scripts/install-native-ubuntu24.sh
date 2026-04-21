@@ -11,7 +11,7 @@
 #   COOLIFY_GIT_URL=https://github.com/coollabsio/coolify.git
 #   COOLIFY_GIT_REF=next
 #   COOLIFY_APP_URL=https://deploywerk.orbytals.com   (default; no trailing slash required)
-#   COOLIFY_LETSENCRYPT_EMAIL=dayworx@zohomail.eu         (required for Certbot unless SKIP)
+#   COOLIFY_LETSENCRYPT_EMAIL=…                         (default dayworx@zohomail.eu; override for Certbot unless SKIP)
 #   COOLIFY_SKIP_LETSENCRYPT=0                        set to 1 to skip TLS (HTTP only)
 #   COOLIFY_RESOLVE_CONFLICTS=1                       stop/disable apache2/caddy if present
 #   COOLIFY_IGNORE_PORT_CONFLICT=0                    set to 1 to continue if port 80/443 busy
@@ -29,7 +29,7 @@ COOLIFY_INSTALL_DIR="${COOLIFY_INSTALL_DIR:-/var/www/coolify}"
 COOLIFY_GIT_URL="${COOLIFY_GIT_URL:-https://github.com/coollabsio/coolify.git}"
 COOLIFY_GIT_REF="${COOLIFY_GIT_REF:-next}"
 COOLIFY_APP_URL="${COOLIFY_APP_URL:-https://deploywerk.orbytals.com}"
-COOLIFY_LETSENCRYPT_EMAIL="${COOLIFY_LETSENCRYPT_EMAIL:-}"
+COOLIFY_LETSENCRYPT_EMAIL="${COOLIFY_LETSENCRYPT_EMAIL:-dayworx@zohomail.eu}"
 COOLIFY_SKIP_LETSENCRYPT="${COOLIFY_SKIP_LETSENCRYPT:-0}"
 COOLIFY_RESOLVE_CONFLICTS="${COOLIFY_RESOLVE_CONFLICTS:-1}"
 COOLIFY_IGNORE_PORT_CONFLICT="${COOLIFY_IGNORE_PORT_CONFLICT:-0}"

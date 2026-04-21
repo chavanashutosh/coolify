@@ -235,6 +235,8 @@ For most users, prefer **[official installation](https://coolify.io/docs/install
 
 A single script installs PHP 8.4 (via **Ondrej PPA**), PostgreSQL, Redis, Nginx, Supervisor, Composer, Node.js 24 (NodeSource), clones this app, builds assets, writes `.env`, runs migrations, configures **Soketi** (systemd), **Horizon** (supervisor), a **cron** entry for `schedule:run`, and (by default) **Certbot** for **Let’s Encrypt** TLS on Nginx.
 
+**Let’s Encrypt contact email:** Certbot’s `-m` value is only the **ACME account contact** (renewal / ToS notices from Let’s Encrypt). It is **not** shown on the certificate; any monitored mailbox is fine. The installer defaults `COOLIFY_LETSENCRYPT_EMAIL`; override it if you use another address.
+
 **Requirements:** **Ubuntu 24.04 (noble)** server, **root** shell, **DNS** for your hostname pointing at this machine **before** Certbot runs.
 
 ### Conflicts and ports
@@ -243,17 +245,23 @@ Before installing Nginx, the script can **stop and disable** common stacks that 
 
 ### Recommended one-liner (HTTPS + Let’s Encrypt)
 
-Default public URL is **`https://deploywerk.orbytals.com`**. Set **`COOLIFY_LETSENCRYPT_EMAIL`** to a real address (Let’s Encrypt account / expiry notices):
+Default public URL is **`https://deploywerk.orbytals.com`**, with a default **`COOLIFY_LETSENCRYPT_EMAIL`** for Certbot (override if you want a different ACME contact):
+
+```bash
+sudo bash scripts/install-native-ubuntu24.sh
+```
+
+With a custom Let’s Encrypt contact:
 
 ```bash
 sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash scripts/install-native-ubuntu24.sh
 ```
 
-Or after cloning only the script:
+Or after fetching only the script:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/coollabsio/coolify/next/scripts/install-native-ubuntu24.sh -o install-native-ubuntu24.sh
-sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash install-native-ubuntu24.sh
+sudo bash install-native-ubuntu24.sh
 ```
 
 (Adjust the URL/branch if you use a fork.)
@@ -266,7 +274,7 @@ sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash install-native-ubuntu24.sh
 | `COOLIFY_GIT_URL` | `https://github.com/coollabsio/coolify.git` | Clone URL |
 | `COOLIFY_GIT_REF` | `next` | Git branch to clone/checkout |
 | `COOLIFY_APP_URL` | `https://deploywerk.orbytals.com` | `APP_URL`, Nginx `server_name`, and Certbot `-d` hostname |
-| `COOLIFY_LETSENCRYPT_EMAIL` | (empty) | **Required** for Certbot when using HTTPS (unless you skip TLS below) |
+| `COOLIFY_LETSENCRYPT_EMAIL` | `dayworx@zohomail.eu` | ACME account contact for Certbot when using HTTPS (override as needed; not shown on the cert) |
 | `COOLIFY_SKIP_LETSENCRYPT` | `0` | Set to `1` to skip Certbot (HTTP-only Nginx) |
 | `COOLIFY_RESOLVE_CONFLICTS` | `1` | Stop/disable `apache2` / `caddy` if installed |
 | `COOLIFY_IGNORE_PORT_CONFLICT` | `0` | Set to `1` to continue even if **:80** / **:443** appear in use (unsafe) |
@@ -282,5 +290,30 @@ HTTP-only example (no TLS from this script):
 ```bash
 sudo COOLIFY_APP_URL=http://127.0.0.1 COOLIFY_SKIP_LETSENCRYPT=1 bash scripts/install-native-ubuntu24.sh
 ```
+
+### Clean reinstall
+
+To tear down what [`scripts/install-native-ubuntu24.sh`](scripts/install-native-ubuntu24.sh) configured and start fresh, use [`scripts/uninstall-native-ubuntu24.sh`](scripts/uninstall-native-ubuntu24.sh) (Ubuntu **24.04**, **root**). It stops **coolify-soketi** and **coolify-horizon**, removes their unit/Supervisor/Nginx/cron files, and optionally purges data. It does **not** remove apt packages (PHP, Postgres, Nginx, Redis, Node, etc.).
+
+Typical full reset (match `COOLIFY_APP_URL` / `COOLIFY_INSTALL_DIR` / `COOLIFY_DB_NAME` to your install), then reinstall:
+
+```bash
+sudo COOLIFY_PURGE_INSTALL_DIR=1 COOLIFY_DROP_DB=1 COOLIFY_CERTBOT_DELETE=1 COOLIFY_REMOVE_SOKETI_GLOBAL=1 \
+  bash scripts/uninstall-native-ubuntu24.sh
+
+sudo COOLIFY_RESET_DB=1 bash scripts/install-native-ubuntu24.sh
+```
+
+`COOLIFY_RESET_DB=1` on the installer recreates an empty database after `DROP DATABASE` from uninstall (or use uninstall’s `COOLIFY_DROP_DB=1` alone and let the installer create the DB again without `RESET` if the role still exists).
+
+| Uninstall variable | Default | Meaning |
+|--------------------|---------|--------|
+| `COOLIFY_INSTALL_DIR` | `/var/www/coolify` | Used when `COOLIFY_PURGE_INSTALL_DIR=1` |
+| `COOLIFY_APP_URL` | `https://deploywerk.orbytals.com` | Hostname for `COOLIFY_CERTBOT_DELETE=1` (`certbot delete --cert-name`) |
+| `COOLIFY_DB_NAME` | `coolify` | Database dropped when `COOLIFY_DROP_DB=1` |
+| `COOLIFY_PURGE_INSTALL_DIR` | `0` | Set `1` to `rm -rf` the install directory |
+| `COOLIFY_DROP_DB` | `0` | Set `1` to `DROP DATABASE IF EXISTS` |
+| `COOLIFY_CERTBOT_DELETE` | `0` | Set `1` to remove the Let’s Encrypt line for that hostname (no-op if absent) |
+| `COOLIFY_REMOVE_SOKETI_GLOBAL` | `0` | Set `1` to `npm uninstall -g @soketi/soketi` |
 
 Certbot uses the **nginx** plugin, enables **`certbot.timer`** for renewals, and passes **`--redirect`** so HTTP redirects to HTTPS after issuance.
