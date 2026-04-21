@@ -217,6 +217,17 @@ clone_or_update_app() {
   parent="$(dirname "${COOLIFY_INSTALL_DIR}")"
   mkdir -p "${parent}"
 
+  # www-data's HOME is often /var/www; `git config --global` writes ~/.gitconfig.
+  # Prefer a pre-created /var/www/.gitconfig so root can keep owning /var/www.
+  # Broader alternative: chown www-data:www-data /var/www && chmod u+rwX /var/www (see NATIVE_INSTALL.md).
+  if [[ "${parent}" == "/var/www" ]] && [[ -d /var/www ]]; then
+    if [[ ! -f /var/www/.gitconfig ]]; then
+      touch /var/www/.gitconfig
+    fi
+    chown www-data:www-data /var/www/.gitconfig
+    chmod 644 /var/www/.gitconfig
+  fi
+
   if [[ -d "${COOLIFY_INSTALL_DIR}/.git" ]]; then
     if [[ "${COOLIFY_UPDATE_EXISTING}" == "1" ]]; then
       log "Updating existing clone…"
@@ -270,15 +281,15 @@ write_env() {
     -e "s|^PUSHER_BACKEND_HOST=.*|PUSHER_BACKEND_HOST=127.0.0.1|" \
     -e "s|^PUSHER_BACKEND_PORT=.*|PUSHER_BACKEND_PORT=6001|" \
     "${COOLIFY_INSTALL_DIR}/.env"
-
-  log "Generating APP_KEY…"
-  sudo -u www-data bash -lc "cd '${COOLIFY_INSTALL_DIR}' && php artisan key:generate --force --no-interaction"
 }
 
 composer_npm_artisan() {
   local d="${COOLIFY_INSTALL_DIR}"
   log "composer install (production)…"
   sudo -u www-data bash -lc "cd '${d}' && composer install --no-dev --optimize-autoloader --no-interaction"
+
+  log "Generating APP_KEY (requires vendor/autoload.php)…"
+  sudo -u www-data bash -lc "cd '${d}' && php artisan key:generate --force --no-interaction"
 
   log "npm ci && npm run build…"
   sudo -u www-data bash -lc "cd '${d}' && npm ci && npm run build"

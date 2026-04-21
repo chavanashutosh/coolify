@@ -53,6 +53,25 @@ sudo git checkout next   # or the branch you intend to run; upstream uses `next`
 
 Run the app as a dedicated user (example `www-data`):
 
+On Debian/Ubuntu, `www-data` often has `HOME=/var/www`, so `git config --global` writes **`/var/www/.gitconfig`**. If `/var/www` is root-owned, Git cannot create that file until you either widen permissions on the directory or pre-create the file:
+
+**Option A — `www-data` owns `/var/www` (simple, broader):**
+
+```bash
+sudo chown www-data:www-data /var/www
+sudo chmod u+rwX /var/www
+```
+
+**Option B — keep root owning `/var/www`, only fix the config file (minimal):**
+
+```bash
+sudo touch /var/www/.gitconfig
+sudo chown www-data:www-data /var/www/.gitconfig
+sudo chmod 644 /var/www/.gitconfig
+```
+
+Then:
+
 ```bash
 sudo chown -R www-data:www-data /var/www/coolify
 sudo -u www-data git config --global --add safe.directory /var/www/coolify
