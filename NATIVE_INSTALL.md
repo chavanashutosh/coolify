@@ -46,10 +46,13 @@ Configure **Redis** with a password if exposed; set `REDIS_PASSWORD` in `.env` a
 
 ```bash
 sudo mkdir -p /var/www
-sudo git clone https://github.com/chavanashutosh/coolify.git /var/www/coolify
+sudo git clone --branch v4.x --single-branch https://github.com/coollabsio/coolify.git /var/www/coolify
 cd /var/www/coolify
-sudo git checkout next   # or the branch you intend to run; upstream uses `next` for PRs (see CONTRIBUTING.md)
+# Default shipping line is v4.x (matches GitHub default). Forks may use main — use the branch you run in production.
+# Upstream uses `next` for PR / contribution workflow (see CONTRIBUTING.md), not as the default install branch.
 ```
+
+The native installer script [`scripts/install-native-ubuntu24.sh`](scripts/install-native-ubuntu24.sh) can **reuse an existing checkout** instead of cloning: if `/opt/Coolify` or `/opt/coolify` is a git repo, it copies that tree into `COOLIFY_INSTALL_DIR` (default `/var/www/coolify`) and checks out `COOLIFY_GIT_REF` (use `auto` to keep the source tree’s current branch). Set `COOLIFY_SKIP_LOCAL_SOURCE=1` to always clone from `COOLIFY_GIT_URL`, or set `COOLIFY_LOCAL_SOURCE_DIR` to another path.
 
 Run the app as a dedicated user (example `www-data`):
 

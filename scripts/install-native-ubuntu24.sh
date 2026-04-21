@@ -8,8 +8,8 @@
 #
 # Environment overrides (optional):
 #   COOLIFY_INSTALL_DIR=/var/www/coolify
-#   COOLIFY_GIT_URL=https://github.com/chavanashutosh/coolify.git
-#   COOLIFY_GIT_REF=next
+#   COOLIFY_GIT_URL=https://github.com/coollabsio/coolify.git
+#   COOLIFY_GIT_REF=v4.x   (upstream default branch; use COOLIFY_GIT_REF=auto for remote HEAD)
 #   COOLIFY_APP_URL=https://deploywerk.orbytals.com   (default; no trailing slash required)
 #   COOLIFY_LETSENCRYPT_EMAIL=…                         (default dayworx@zohomail.eu; override for Certbot unless SKIP)
 #   COOLIFY_SKIP_LETSENCRYPT=0                        set to 1 to skip TLS (HTTP only)
@@ -21,14 +21,16 @@
 #   COOLIFY_UPDATE_EXISTING=0   set to 1 to git pull when install dir already exists
 #   COOLIFY_REMOVE_EXISTING_INSTALL=0  set to 1 to rm -rf install dir then fresh clone (overrides UPDATE_EXISTING)
 #   COOLIFY_RESET_DB=0          set to 1 to DROP DATABASE (destructive) before create
+#   COOLIFY_LOCAL_SOURCE_DIR=   optional explicit path to an existing git checkout (copy instead of clone)
+#   COOLIFY_SKIP_LOCAL_SOURCE=0  set to 1 to always git clone (ignore /opt/Coolify and COOLIFY_LOCAL_SOURCE_DIR)
 # =============================================================================
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
 COOLIFY_INSTALL_DIR="${COOLIFY_INSTALL_DIR:-/var/www/coolify}"
-COOLIFY_GIT_URL="${COOLIFY_GIT_URL:-https://github.com/chavanashutosh/coolify.git}"
-COOLIFY_GIT_REF="${COOLIFY_GIT_REF:-next}"
+COOLIFY_GIT_URL="${COOLIFY_GIT_URL:-https://github.com/coollabsio/coolify.git}"
+COOLIFY_GIT_REF="${COOLIFY_GIT_REF:-v4.x}"
 COOLIFY_APP_URL="${COOLIFY_APP_URL:-https://deploywerk.orbytals.com}"
 COOLIFY_LETSENCRYPT_EMAIL="${COOLIFY_LETSENCRYPT_EMAIL:-dayworx@zohomail.eu}"
 COOLIFY_SKIP_LETSENCRYPT="${COOLIFY_SKIP_LETSENCRYPT:-0}"
@@ -40,6 +42,8 @@ COOLIFY_DB_PASSWORD="${COOLIFY_DB_PASSWORD:-}"
 COOLIFY_UPDATE_EXISTING="${COOLIFY_UPDATE_EXISTING:-0}"
 COOLIFY_REMOVE_EXISTING_INSTALL="${COOLIFY_REMOVE_EXISTING_INSTALL:-0}"
 COOLIFY_RESET_DB="${COOLIFY_RESET_DB:-0}"
+COOLIFY_LOCAL_SOURCE_DIR="${COOLIFY_LOCAL_SOURCE_DIR:-}"
+COOLIFY_SKIP_LOCAL_SOURCE="${COOLIFY_SKIP_LOCAL_SOURCE:-0}"
 NODE_MAJOR="${NODE_MAJOR:-24}"
 
 # Derived from COOLIFY_APP_URL (set in resolve_app_domain)
@@ -221,6 +225,100 @@ redis_enable() {
   systemctl enable --now redis-server
 }
 
+# Sets COOLIFY_GIT_REF_EFFECTIVE. COOLIFY_GIT_REF=auto uses the remote's default branch (symref HEAD).
+resolve_coolify_git_ref() {
+  local url="${COOLIFY_GIT_URL}"
+  local ref="${COOLIFY_GIT_REF}"
+  local sym line head_name
+
+  [[ -n "${url}" ]] || die "COOLIFY_GIT_URL is empty."
+
+  if [[ "${ref}" == "auto" ]]; then
+    sym="$(git ls-remote --symref "${url}" HEAD 2>/dev/null)" || die "Could not query ${url} (git ls-remote failed). Check URL and network."
+    head_name=""
+    while IFS= read -r line; do
+      if [[ "${line}" == ref:* ]]; then
+        head_name="${line#ref: refs/heads/}"
+        head_name="${head_name%%$'\t'*}"
+        head_name="${head_name%% *}"
+        break
+      fi
+    done <<<"${sym}"
+    [[ -n "${head_name}" ]] || die "Could not resolve default branch from ${url} (unexpected git ls-remote output)."
+    COOLIFY_GIT_REF_EFFECTIVE="${head_name}"
+    log "COOLIFY_GIT_REF=auto → effective branch ${COOLIFY_GIT_REF_EFFECTIVE} (remote HEAD)"
+  else
+    [[ -n "${ref}" ]] || die "COOLIFY_GIT_REF is empty. Set a branch name or COOLIFY_GIT_REF=auto."
+    if ! git ls-remote "${url}" "refs/heads/${ref}" | grep -q .; then
+      die "Remote branch '${ref}' not found on ${url}. Set COOLIFY_GIT_REF to an existing branch or use COOLIFY_GIT_REF=auto for the remote's default branch."
+    fi
+    COOLIFY_GIT_REF_EFFECTIVE="${ref}"
+  fi
+  export COOLIFY_GIT_REF_EFFECTIVE
+}
+
+# Sets COOLIFY_LOCAL_SOURCE_EFFECTIVE to an absolute path with .git, or leaves it empty.
+pick_local_source() {
+  COOLIFY_LOCAL_SOURCE_EFFECTIVE=""
+  if [[ "${COOLIFY_SKIP_LOCAL_SOURCE}" == "1" ]]; then
+    return 0
+  fi
+  local dir candidate
+  if [[ -n "${COOLIFY_LOCAL_SOURCE_DIR}" ]]; then
+    dir="${COOLIFY_LOCAL_SOURCE_DIR}"
+    if [[ -d "${dir}/.git" ]]; then
+      COOLIFY_LOCAL_SOURCE_EFFECTIVE="$(cd "${dir}" && pwd -P)"
+    else
+      log "COOLIFY_LOCAL_SOURCE_DIR=${dir} is not a git checkout (.git missing); cloning from remote instead."
+    fi
+    return 0
+  fi
+  for candidate in /opt/Coolify /opt/coolify; do
+    if [[ -d "${candidate}/.git" ]]; then
+      COOLIFY_LOCAL_SOURCE_EFFECTIVE="$(cd "${candidate}" && pwd -P)"
+      log "Found existing repo at ${COOLIFY_LOCAL_SOURCE_EFFECTIVE}; copying to install dir (set COOLIFY_SKIP_LOCAL_SOURCE=1 to force git clone)."
+      return 0
+    fi
+  done
+}
+
+# Sets COOLIFY_GIT_REF_EFFECTIVE from an on-disk repo (no COOLIFY_GIT_URL ls-remote for branch auto).
+resolve_coolify_git_ref_for_local() {
+  local src="$1"
+  local ref="${COOLIFY_GIT_REF}"
+  local br
+
+  [[ -d "${src}/.git" ]] || die "Not a git checkout: ${src}"
+
+  if [[ "${ref}" == "auto" ]]; then
+    br="$(git -C "${src}" rev-parse --abbrev-ref HEAD 2>/dev/null)" || die "Could not read current branch at ${src}."
+    if [[ "${br}" == "HEAD" ]]; then
+      COOLIFY_GIT_REF_EFFECTIVE="$(git -C "${src}" rev-parse HEAD)"
+      log "COOLIFY_GIT_REF=auto → source is detached; effective ref ${COOLIFY_GIT_REF_EFFECTIVE:0:12}… (full SHA)"
+    else
+      COOLIFY_GIT_REF_EFFECTIVE="${br}"
+      log "COOLIFY_GIT_REF=auto → effective branch ${COOLIFY_GIT_REF_EFFECTIVE} (current branch at ${src})"
+    fi
+  else
+    [[ -n "${ref}" ]] || die "COOLIFY_GIT_REF is empty. Set a branch name or COOLIFY_GIT_REF=auto."
+    if git -C "${src}" show-ref --verify --quiet "refs/heads/${ref}"; then
+      COOLIFY_GIT_REF_EFFECTIVE="${ref}"
+    elif git -C "${src}" rev-parse --verify "${ref}^{commit}" >/dev/null 2>&1; then
+      COOLIFY_GIT_REF_EFFECTIVE="${ref}"
+    else
+      die "Branch or ref '${ref}' not found in ${src}. Use COOLIFY_GIT_REF=auto for the checkout's current branch, or fix COOLIFY_GIT_REF."
+    fi
+  fi
+  export COOLIFY_GIT_REF_EFFECTIVE
+}
+
+remove_incomplete_install_dir() {
+  if [[ -e "${COOLIFY_INSTALL_DIR}" ]] && [[ ! -d "${COOLIFY_INSTALL_DIR}/.git" ]]; then
+    log "Removing incomplete install path (no valid git repo)…"
+    rm -rf "${COOLIFY_INSTALL_DIR}"
+  fi
+}
+
 clone_or_update_app() {
   local parent
   parent="$(dirname "${COOLIFY_INSTALL_DIR}")"
@@ -247,18 +345,53 @@ clone_or_update_app() {
 
   if [[ -d "${COOLIFY_INSTALL_DIR}/.git" ]]; then
     if [[ "${COOLIFY_UPDATE_EXISTING}" == "1" ]]; then
+      resolve_coolify_git_ref
       log "Updating existing clone…"
       git -C "${COOLIFY_INSTALL_DIR}" fetch --all --prune
-      git -C "${COOLIFY_INSTALL_DIR}" checkout "${COOLIFY_GIT_REF}"
+      if ! git -C "${COOLIFY_INSTALL_DIR}" ls-remote origin "refs/heads/${COOLIFY_GIT_REF_EFFECTIVE}" | grep -q .; then
+        die "Branch '${COOLIFY_GIT_REF_EFFECTIVE}' not found on this clone's origin after fetch. Fix COOLIFY_GIT_REF / remote or use COOLIFY_GIT_REF=auto."
+      fi
+      git -C "${COOLIFY_INSTALL_DIR}" checkout "${COOLIFY_GIT_REF_EFFECTIVE}"
       git -C "${COOLIFY_INSTALL_DIR}" pull --ff-only || die "git pull failed"
     else
       die "Install directory already exists: ${COOLIFY_INSTALL_DIR}. Set COOLIFY_UPDATE_EXISTING=1 to pull, or remove the directory."
     fi
   elif [[ -e "${COOLIFY_INSTALL_DIR}" ]]; then
-    die "Path exists but is not a git repo: ${COOLIFY_INSTALL_DIR}"
-  else
-    log "Cloning ${COOLIFY_GIT_URL} (${COOLIFY_GIT_REF})…"
-    git clone --branch "${COOLIFY_GIT_REF}" --single-branch "${COOLIFY_GIT_URL}" "${COOLIFY_INSTALL_DIR}"
+    if [[ -z "$(ls -A "${COOLIFY_INSTALL_DIR}" 2>/dev/null)" ]]; then
+      log "Removing empty directory left by a previous failed install…"
+      rmdir "${COOLIFY_INSTALL_DIR}" 2>/dev/null || rm -rf "${COOLIFY_INSTALL_DIR}"
+    else
+      die "Path exists but is not a git repo: ${COOLIFY_INSTALL_DIR}. Remove it, or set COOLIFY_REMOVE_EXISTING_INSTALL=1 for a destructive fresh clone."
+    fi
+  fi
+
+  pick_local_source
+
+  if [[ ! -d "${COOLIFY_INSTALL_DIR}/.git" ]]; then
+    if [[ -n "${COOLIFY_LOCAL_SOURCE_EFFECTIVE:-}" ]] && [[ "${COOLIFY_SKIP_LOCAL_SOURCE}" != "1" ]]; then
+      local real_src real_inst
+      real_src="$(cd "${COOLIFY_LOCAL_SOURCE_EFFECTIVE}" && pwd -P)"
+      mkdir -p "${COOLIFY_INSTALL_DIR}"
+      real_inst="$(cd "${COOLIFY_INSTALL_DIR}" && pwd -P)"
+      if [[ "${real_src}" == "${real_inst}" ]]; then
+        die "Local source and COOLIFY_INSTALL_DIR are the same path (${real_src}). Set COOLIFY_INSTALL_DIR to the target (e.g. /var/www/coolify)."
+      fi
+      if [[ -n "$(ls -A "${COOLIFY_INSTALL_DIR}" 2>/dev/null)" ]]; then
+        die "Install directory ${COOLIFY_INSTALL_DIR} is not empty; cannot copy from ${real_src}. Remove contents or set COOLIFY_REMOVE_EXISTING_INSTALL=1."
+      fi
+      resolve_coolify_git_ref_for_local "${COOLIFY_LOCAL_SOURCE_EFFECTIVE}"
+      log "Copying ${COOLIFY_LOCAL_SOURCE_EFFECTIVE} → ${COOLIFY_INSTALL_DIR} (skipping git clone)…"
+      cp -a "${COOLIFY_LOCAL_SOURCE_EFFECTIVE}/." "${COOLIFY_INSTALL_DIR}/"
+      git -C "${COOLIFY_INSTALL_DIR}" checkout "${COOLIFY_GIT_REF_EFFECTIVE}" \
+        || die "git checkout ${COOLIFY_GIT_REF_EFFECTIVE} failed in ${COOLIFY_INSTALL_DIR}."
+    else
+      resolve_coolify_git_ref
+      log "Cloning ${COOLIFY_GIT_URL} (${COOLIFY_GIT_REF_EFFECTIVE})…"
+      if ! git clone --branch "${COOLIFY_GIT_REF_EFFECTIVE}" --single-branch "${COOLIFY_GIT_URL}" "${COOLIFY_INSTALL_DIR}"; then
+        remove_incomplete_install_dir
+        die "git clone failed (see errors above)."
+      fi
+    fi
   fi
 
   chown -R www-data:www-data "${COOLIFY_INSTALL_DIR}"
