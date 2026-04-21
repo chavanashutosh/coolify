@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
             },
             host: "0.0.0.0",
             hmr: {
-                host: env.VITE_HOST || '0.0.0.0'
+                host: env.VITE_HOST || 'localhost',
             },
         },
         plugins: [
