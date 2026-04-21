@@ -209,3 +209,59 @@ sudo supervisorctl restart coolify-horizon
 - **Support**: upstream troubleshooting assumes the **Docker** layout; native issues are harder to reproduce.
 
 For most users, prefer **[official installation](https://coolify.io/docs/installation)**. Use this document when you deliberately need a **from-source, bare-metal** layout.
+
+---
+
+## Automated installer (Ubuntu 24.04)
+
+A single script installs PHP 8.4 (via **Ondrej PPA**), PostgreSQL, Redis, Nginx, Supervisor, Composer, Node.js 24 (NodeSource), clones this app, builds assets, writes `.env`, runs migrations, configures **Soketi** (systemd), **Horizon** (supervisor), a **cron** entry for `schedule:run`, and (by default) **Certbot** for **Let’s Encrypt** TLS on Nginx.
+
+**Requirements:** **Ubuntu 24.04 (noble)** server, **root** shell, **DNS** for your hostname pointing at this machine **before** Certbot runs.
+
+### Conflicts and ports
+
+Before installing Nginx, the script can **stop and disable** common stacks that bind **80/443** (`apache2`, `caddy`) when `COOLIFY_RESOLVE_CONFLICTS=1` (default). It then checks that **TCP 80** (and **443** if HTTPS + Certbot) are free. If something else (e.g. another proxy or Docker publishing `:80`) still holds the port, the script exits unless you set `COOLIFY_IGNORE_PORT_CONFLICT=1`.
+
+### Recommended one-liner (HTTPS + Let’s Encrypt)
+
+Default public URL is **`https://deploywerk.orbytals.com`**. Set **`COOLIFY_LETSENCRYPT_EMAIL`** to a real address (Let’s Encrypt account / expiry notices):
+
+```bash
+sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash scripts/install-native-ubuntu24.sh
+```
+
+Or after cloning only the script:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/coollabsio/coolify/next/scripts/install-native-ubuntu24.sh -o install-native-ubuntu24.sh
+sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash install-native-ubuntu24.sh
+```
+
+(Adjust the URL/branch if you use a fork.)
+
+### Environment variables (all optional)
+
+| Variable | Default | Meaning |
+|----------|---------|--------|
+| `COOLIFY_INSTALL_DIR` | `/var/www/coolify` | Install path |
+| `COOLIFY_GIT_URL` | `https://github.com/coollabsio/coolify.git` | Clone URL |
+| `COOLIFY_GIT_REF` | `next` | Git branch to clone/checkout |
+| `COOLIFY_APP_URL` | `https://deploywerk.orbytals.com` | `APP_URL`, Nginx `server_name`, and Certbot `-d` hostname |
+| `COOLIFY_LETSENCRYPT_EMAIL` | (empty) | **Required** for Certbot when using HTTPS (unless you skip TLS below) |
+| `COOLIFY_SKIP_LETSENCRYPT` | `0` | Set to `1` to skip Certbot (HTTP-only Nginx) |
+| `COOLIFY_RESOLVE_CONFLICTS` | `1` | Stop/disable `apache2` / `caddy` if installed |
+| `COOLIFY_IGNORE_PORT_CONFLICT` | `0` | Set to `1` to continue even if **:80** / **:443** appear in use (unsafe) |
+| `COOLIFY_DB_USER` | `coolify` | PostgreSQL role name |
+| `COOLIFY_DB_NAME` | `coolify` | Database name |
+| `COOLIFY_DB_PASSWORD` | (generated) | DB password; written to `.env` |
+| `COOLIFY_UPDATE_EXISTING` | `0` | Set to `1` to `git pull` when the install directory already exists |
+| `COOLIFY_RESET_DB` | `0` | Set to `1` to `DROP DATABASE` before create (destructive) |
+| `NODE_MAJOR` | `24` | NodeSource major version |
+
+HTTP-only example (no TLS from this script):
+
+```bash
+sudo COOLIFY_APP_URL=http://127.0.0.1 COOLIFY_SKIP_LETSENCRYPT=1 bash scripts/install-native-ubuntu24.sh
+```
+
+Certbot uses the **nginx** plugin, enables **`certbot.timer`** for renewals, and passes **`--redirect`** so HTTP redirects to HTTPS after issuance.
