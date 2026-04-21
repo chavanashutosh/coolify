@@ -11,7 +11,7 @@
 #   COOLIFY_GIT_URL=https://github.com/coollabsio/coolify.git
 #   COOLIFY_GIT_REF=next
 #   COOLIFY_APP_URL=https://deploywerk.orbytals.com   (default; no trailing slash required)
-#   COOLIFY_LETSENCRYPT_EMAIL=you@example.com         (required for Certbot unless SKIP)
+#   COOLIFY_LETSENCRYPT_EMAIL=dayworx@zohomail.eu         (required for Certbot unless SKIP)
 #   COOLIFY_SKIP_LETSENCRYPT=0                        set to 1 to skip TLS (HTTP only)
 #   COOLIFY_RESOLVE_CONFLICTS=1                       stop/disable apache2/caddy if present
 #   COOLIFY_IGNORE_PORT_CONFLICT=0                    set to 1 to continue if port 80/443 busy
