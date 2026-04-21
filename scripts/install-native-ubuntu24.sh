@@ -8,7 +8,7 @@
 #
 # Environment overrides (optional):
 #   COOLIFY_INSTALL_DIR=/var/www/coolify
-#   COOLIFY_GIT_URL=https://github.com/coollabsio/coolify.git
+#   COOLIFY_GIT_URL=https://github.com/chavanashutosh/coolify.git
 #   COOLIFY_GIT_REF=next
 #   COOLIFY_APP_URL=https://deploywerk.orbytals.com   (default; no trailing slash required)
 #   COOLIFY_LETSENCRYPT_EMAIL=…                         (default dayworx@zohomail.eu; override for Certbot unless SKIP)
@@ -26,7 +26,7 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
 COOLIFY_INSTALL_DIR="${COOLIFY_INSTALL_DIR:-/var/www/coolify}"
-COOLIFY_GIT_URL="${COOLIFY_GIT_URL:-https://github.com/coollabsio/coolify.git}"
+COOLIFY_GIT_URL="${COOLIFY_GIT_URL:-https://github.com/chavanashutosh/coolify.git}"
 COOLIFY_GIT_REF="${COOLIFY_GIT_REF:-next}"
 COOLIFY_APP_URL="${COOLIFY_APP_URL:-https://deploywerk.orbytals.com}"
 COOLIFY_LETSENCRYPT_EMAIL="${COOLIFY_LETSENCRYPT_EMAIL:-dayworx@zohomail.eu}"
@@ -85,7 +85,7 @@ port_listeners_summary() {
 }
 
 resolve_conflicts() {
-  log "Checking for conflicting web stacks (Apache, Caddy) and ports 80/443…"
+  log "Checking for conflicting web stacks (Apache, Caddy, Nginx) and ports 80/443…"
 
   if [[ "${COOLIFY_RESOLVE_CONFLICTS}" == "1" ]]; then
     for svc in apache2 caddy; do
@@ -102,6 +102,13 @@ resolve_conflicts() {
       log "Apache2 package is installed; stopping/disabling units…"
       systemctl stop apache2 2>/dev/null || true
       systemctl disable apache2 2>/dev/null || true
+    fi
+    # Nginx may already be bound to :80 from a prior run or manual config; stop (not disable) so this script can reclaim the port and rewrite the site.
+    if systemctl list-unit-files --type=service 2>/dev/null | grep -qE '^nginx\.service'; then
+      if systemctl is-active --quiet nginx 2>/dev/null; then
+        log "Stopping nginx to free port 80 (this installer will start it again after configuring the Coolify site)…"
+        systemctl stop nginx 2>/dev/null || true
+      fi
     fi
   fi
 

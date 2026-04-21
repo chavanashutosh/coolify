@@ -46,7 +46,7 @@ Configure **Redis** with a password if exposed; set `REDIS_PASSWORD` in `.env` a
 
 ```bash
 sudo mkdir -p /var/www
-sudo git clone https://github.com/coollabsio/coolify.git /var/www/coolify
+sudo git clone https://github.com/chavanashutosh/coolify.git /var/www/coolify
 cd /var/www/coolify
 sudo git checkout next   # or the branch you intend to run; upstream uses `next` for PRs (see CONTRIBUTING.md)
 ```
@@ -241,7 +241,7 @@ A single script installs PHP 8.4 (via **Ondrej PPA**), PostgreSQL, Redis, Nginx,
 
 ### Conflicts and ports
 
-Before installing Nginx, the script can **stop and disable** common stacks that bind **80/443** (`apache2`, `caddy`) when `COOLIFY_RESOLVE_CONFLICTS=1` (default). It then checks that **TCP 80** (and **443** if HTTPS + Certbot) are free. If something else (e.g. another proxy or Docker publishing `:80`) still holds the port, the script exits unless you set `COOLIFY_IGNORE_PORT_CONFLICT=1`.
+Before installing Nginx, the script can **stop and disable** common stacks that bind **80/443** (`apache2`, `caddy`) when `COOLIFY_RESOLVE_CONFLICTS=1` (default). It also **stops** an already-running **`nginx`** (without disabling the unit) so a previous native install or default site is not left holding **:80**. It then checks that **TCP 80** (and **443** if HTTPS + Certbot) are free. If something else (e.g. **Docker** publishing `:80`, or Traefik) still holds the port, the script exits unless you set `COOLIFY_IGNORE_PORT_CONFLICT=1`.
 
 ### Recommended one-liner (HTTPS + Let’s Encrypt)
 
@@ -260,7 +260,7 @@ sudo COOLIFY_LETSENCRYPT_EMAIL=you@example.com bash scripts/install-native-ubunt
 Or after fetching only the script:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/coollabsio/coolify/next/scripts/install-native-ubuntu24.sh -o install-native-ubuntu24.sh
+curl -fsSL https://raw.githubusercontent.com/chavanashutosh/coolify/next/scripts/install-native-ubuntu24.sh -o install-native-ubuntu24.sh
 sudo bash install-native-ubuntu24.sh
 ```
 
@@ -271,7 +271,7 @@ sudo bash install-native-ubuntu24.sh
 | Variable | Default | Meaning |
 |----------|---------|--------|
 | `COOLIFY_INSTALL_DIR` | `/var/www/coolify` | Install path |
-| `COOLIFY_GIT_URL` | `https://github.com/coollabsio/coolify.git` | Clone URL |
+| `COOLIFY_GIT_URL` | `https://github.com/chavanashutosh/coolify.git` | Clone URL |
 | `COOLIFY_GIT_REF` | `next` | Git branch to clone/checkout |
 | `COOLIFY_APP_URL` | `https://deploywerk.orbytals.com` | `APP_URL`, Nginx `server_name`, and Certbot `-d` hostname |
 | `COOLIFY_LETSENCRYPT_EMAIL` | `dayworx@zohomail.eu` | ACME account contact for Certbot when using HTTPS (override as needed; not shown on the cert) |
